@@ -72,6 +72,8 @@ int json_get_string(const char *json, const char *key, char *out, int out_size) 
 int json_get_int(const char *json, const char *key, int *out) {
     const char *val = find_key(json, key);
     if (!val) return -1;
+    while (*val && isspace((unsigned char)*val)) val++;
+    if (*val == '"') val++;
     *out = atoi(val);
     return 0;
 }

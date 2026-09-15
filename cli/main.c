@@ -6,6 +6,7 @@
 #include "ss_config.h"
 #include "ss_state.h"
 #include "output.h"
+#include <ctype.h>
 
 static ss_state_t state;
 
@@ -63,7 +64,7 @@ static int cmd_login(int argc, char **argv) {
     ss_state_set_user(&state, user_id, email_out, created);
     ss_state_save_user(&state);
 
-    fprintf(stderr, "Logged in as %s (ID: %d)\n", email_out, user_id);
+    if (g_json_enabled) printf("{\"ok\":true,\"userId\":%d,\"email\":\"%s\"}\n", user_id, email_out); else fprintf(stderr, "Logged in as %s (ID: %d)\n", email_out, user_id);
     return 0;
 }
 
@@ -77,7 +78,7 @@ static int cmd_logout(int argc, char **argv) {
     unlink(path);
     snprintf(path, sizeof(path), "%s/.simple-social-tui/user.json", home);
     unlink(path);
-    fprintf(stderr, "Logged out.\n");
+    if (g_json_enabled) printf("{\"ok\":true}\n"); else fprintf(stderr, "Logged out.\n");
     return 0;
 }
 
@@ -107,7 +108,7 @@ static int cmd_register(int argc, char **argv) {
         print_error(api_get_last_error());
         return 1;
     }
-    fprintf(stderr, "Registration complete. You can now login.\n");
+    if (g_json_enabled) printf("{\"ok\":true}\n"); else fprintf(stderr, "Registration complete. You can now login.\n");
     return 0;
 }
 
@@ -120,7 +121,7 @@ static int cmd_send_otp(int argc, char **argv) {
         print_error(api_get_last_error());
         return 1;
     }
-    fprintf(stderr, "OTP sent to %s\n", argv[0]);
+    if (g_json_enabled) printf("{\"ok\":true}\n"); else fprintf(stderr, "OTP sent to %s\n", argv[0]);
     return 0;
 }
 
@@ -137,7 +138,7 @@ static int cmd_reset_password(int argc, char **argv) {
         print_error(api_get_last_error());
         return 1;
     }
-    fprintf(stderr, "Password reset. You can now login.\n");
+    if (g_json_enabled) printf("{\"ok\":true}\n"); else fprintf(stderr, "Password reset. You can now login.\n");
     return 0;
 }
 
@@ -180,9 +181,16 @@ static int cmd_create(int argc, char **argv) {
     if (require_auth() != 0) return 1;
 
     char full_text[5000] = {0};
+    size_t pos = 0;
     for (int i = 0; i < argc; i++) {
-        if (i > 0) strcat(full_text, " ");
-        strcat(full_text, argv[i]);
+        const char *src = argv[i];
+        size_t slen = strlen(src);
+        size_t need = slen + (i > 0 ? 1 : 0);
+        if (pos + need >= sizeof(full_text)) { need = sizeof(full_text) - 1 - pos; if (need == 0) break; if (i > 0 && pos + 1 < sizeof(full_text)) full_text[pos++] = ' '; size_t copy = need - (i > 0 ? 1 : 0); if (copy > slen) copy = slen; memcpy(full_text + pos, src, copy); pos += copy; full_text[pos] = '\0'; break; }
+        if (i > 0) full_text[pos++] = ' ';
+        memcpy(full_text + pos, src, slen);
+        pos += slen;
+        full_text[pos] = '\0';
     }
 
     char post_id[64] = {0};
@@ -190,7 +198,7 @@ static int cmd_create(int argc, char **argv) {
         print_error(api_get_last_error());
         return 1;
     }
-    fprintf(stderr, "Created post %s\n", post_id);
+    if (g_json_enabled) printf("{\"postId\":\"%s\"}\n", post_id); else fprintf(stderr, "Created post %s\n", post_id);
     return 0;
 }
 
@@ -201,7 +209,7 @@ static int cmd_delete_post(int argc, char **argv) {
         print_error(api_get_last_error());
         return 1;
     }
-    fprintf(stderr, "Deleted post %s\n", argv[0]);
+    if (g_json_enabled) printf("{\"deleted\":true,\"postId\":\"%s\"}\n", argv[0]); else fprintf(stderr, "Deleted post %s\n", argv[0]);
     return 0;
 }
 
@@ -212,7 +220,7 @@ static int cmd_like(int argc, char **argv) {
         print_error(api_get_last_error());
         return 1;
     }
-    fprintf(stderr, "Liked post %s\n", argv[0]);
+    if (g_json_enabled) printf("{\"liked\":true,\"postId\":\"%s\"}\n", argv[0]); else fprintf(stderr, "Liked post %s\n", argv[0]);
     return 0;
 }
 
@@ -223,7 +231,7 @@ static int cmd_unlike(int argc, char **argv) {
         print_error(api_get_last_error());
         return 1;
     }
-    fprintf(stderr, "Unliked post %s\n", argv[0]);
+    if (g_json_enabled) printf("{\"liked\":false,\"postId\":\"%s\"}\n", argv[0]); else fprintf(stderr, "Unliked post %s\n", argv[0]);
     return 0;
 }
 
@@ -249,16 +257,23 @@ static int cmd_comment(int argc, char **argv) {
     if (require_auth() != 0) return 1;
     const char *post_id = argv[0];
     char text[5000] = {0};
+    size_t pos = 0;
     for (int i = 1; i < argc; i++) {
-        if (i > 1) strcat(text, " ");
-        strcat(text, argv[i]);
+        const char *src = argv[i];
+        size_t slen = strlen(src);
+        size_t need = slen + (i > 1 ? 1 : 0);
+        if (pos + need >= sizeof(text)) { need = sizeof(text) - 1 - pos; if (need == 0) break; if (i > 1 && pos + 1 < sizeof(text)) text[pos++] = ' '; size_t copy = need - (i > 1 ? 1 : 0); if (copy > slen) copy = slen; memcpy(text + pos, src, copy); pos += copy; text[pos] = '\0'; break; }
+        if (i > 1) text[pos++] = ' ';
+        memcpy(text + pos, src, slen);
+        pos += slen;
+        text[pos] = '\0';
     }
     int comment_id = 0;
     if (api_create_comment(post_id, text, &comment_id) != 0) {
         print_error(api_get_last_error());
         return 1;
     }
-    fprintf(stderr, "Comment %d added to %s\n", comment_id, post_id);
+    if (g_json_enabled) printf("{\"commentId\":%d,\"postId\":\"%s\"}\n", comment_id, post_id); else fprintf(stderr, "Comment %d added to %s\n", comment_id, post_id);
     return 0;
 }
 
@@ -269,7 +284,7 @@ static int cmd_delete_comment(int argc, char **argv) {
         print_error(api_get_last_error());
         return 1;
     }
-    fprintf(stderr, "Deleted comment %s\n", argv[0]);
+    if (g_json_enabled) printf("{\"deleted\":true,\"commentId\":%s}\n", argv[0]); else fprintf(stderr, "Deleted comment %s\n", argv[0]);
     return 0;
 }
 
@@ -318,7 +333,7 @@ static int cmd_follow(int argc, char **argv) {
         print_error(api_get_last_error());
         return 1;
     }
-    fprintf(stderr, "Followed user %s\n", argv[0]);
+    if (g_json_enabled) printf("{\"following\":true,\"userId\":%s}\n", argv[0]); else fprintf(stderr, "Followed user %s\n", argv[0]);
     return 0;
 }
 
@@ -329,7 +344,7 @@ static int cmd_unfollow(int argc, char **argv) {
         print_error(api_get_last_error());
         return 1;
     }
-    fprintf(stderr, "Unfollowed user %s\n", argv[0]);
+    if (g_json_enabled) printf("{\"following\":false,\"userId\":%s}\n", argv[0]); else fprintf(stderr, "Unfollowed user %s\n", argv[0]);
     return 0;
 }
 
@@ -382,7 +397,7 @@ static int cmd_notify_count(int argc, char **argv) {
         print_error(api_get_last_error());
         return 1;
     }
-    printf("%d\n", count);
+    if (g_json_enabled) print_count_json(count, "count"); else print_count(count);
     return 0;
 }
 
@@ -393,7 +408,7 @@ static int cmd_mark_seen(int argc, char **argv) {
         print_error(api_get_last_error());
         return 1;
     }
-    fprintf(stderr, "Notifications marked as seen.\n");
+    if (g_json_enabled) printf("{\"ok\":true}\n"); else fprintf(stderr, "Notifications marked as seen.\n");
     return 0;
 }
 
@@ -405,7 +420,7 @@ static int cmd_upload(int argc, char **argv) {
         print_error(api_get_last_error());
         return 1;
     }
-    printf("%s\n", url);
+    if (g_json_enabled) { printf("{\"mediaUrl\":\""); for (char *q=url; *q; q++) { if (*q=='"' || *q=='\\') putchar('\\'); putchar(*q); } printf("\"}\n"); } else printf("%s\n", url);
     return 0;
 }
 
@@ -417,7 +432,7 @@ static int cmd_delete_account(int argc, char **argv) {
         return 1;
     }
     ss_state_clear(&state);
-    fprintf(stderr, "Account deleted.\n");
+    if (g_json_enabled) printf("{\"deleted\":true}\n"); else fprintf(stderr, "Account deleted.\n");
     return 0;
 }
 
@@ -508,23 +523,19 @@ int main(int argc, char **argv) {
     }
 
     int next_arg = 1;
-
-    if (strcmp(argv[next_arg], "--help") == 0) {
-        print_help();
-        return 0;
-    }
-    if (strcmp(argv[next_arg], "--color") == 0) {
-        g_color_enabled = 1;
+    while (next_arg < argc && argv[next_arg][0] == '-') {
+        if (strcmp(argv[next_arg], "--help") == 0) { print_help(); return 0; }
+        else if (strcmp(argv[next_arg], "--color") == 0) g_color_enabled = 1;
+        else if (strcmp(argv[next_arg], "--json") == 0) g_json_enabled = 1;
+        else break;
         next_arg++;
     }
     if (next_arg >= argc) {
         print_help();
         return 1;
     }
-
-    if (g_color_enabled == 0 && isatty(STDERR_FILENO)) {
-        g_color_enabled = 1;
-    }
+    if (g_json_enabled) g_color_enabled = 0;
+    else if (g_color_enabled == 0 && isatty(STDERR_FILENO)) g_color_enabled = 1;
     output_init();
 
     const char *cmd_name = argv[next_arg];

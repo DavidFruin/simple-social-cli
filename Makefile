@@ -10,16 +10,20 @@ CLI_OBJS = $(CLI_SRCS:.c=.o)
 LIB = lib/libss.so
 BIN = simple-social-cli
 
-all: $(LIB) $(BIN)
+all: vendor-links $(LIB) $(BIN)
+
+vendor-links:
+	@mkdir -p vendor
+	@if [ ! -e vendor/libcurl.so ]; then ln -sf /usr/lib/x86_64-linux-gnu/libcurl.so.4.8.0 vendor/libcurl.so; echo "linked vendor/libcurl.so"; fi
 
 $(LIB): $(LIB_OBJS)
-	$(CC) -shared -o $@ $^ -Lvendor -lcurl -lssl -lcrypto -lz
+	$(CC) -shared -o $@ $^ -Lvendor -lcurl
 
 lib/%.o: lib/%.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(BIN): $(CLI_OBJS)
-	$(CC) -o $@ $^ -Llib -lss
+	$(CC) -o $@ $^ -Llib -lss -Wl,-rpath,'$$ORIGIN/../lib' -Wl,-rpath,'$$ORIGIN/lib'
 
 cli/%.o: cli/%.c
 	$(CC) -Wall -Wextra -O2 -Ilib -c -o $@ $<
@@ -33,4 +37,4 @@ install: $(BIN)
 uninstall:
 	rm -f /usr/local/bin/$(BIN)
 
-.PHONY: all clean install uninstall
+.PHONY: all clean install uninstall vendor-links

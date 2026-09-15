@@ -391,6 +391,7 @@ static int parse_posts(const char *resp, api_posts_result_t *result) {
         json_get_string(item, "text", p->text, sizeof(p->text));
         json_get_string(item, "timestamp", p->timestamp, sizeof(p->timestamp));
         json_get_string(item, "mediaUrl", p->media_url, sizeof(p->media_url));
+        if (strcmp(p->media_url, "null") == 0) p->media_url[0] = '\0';
         json_get_int(item, "userID", &p->user_id);
         json_get_string(item, "userEmail", p->user_email, sizeof(p->user_email));
 
@@ -560,6 +561,8 @@ int api_get_my_follows(int user_id, api_users_result_t *result) {
         api_user_t *u = &result->users[result->count];
         json_get_int(item, "id", &u->id);
         json_get_string(item, "email", u->email, sizeof(u->email));
+        if (json_get_string(item, "timestamp", u->created_at, sizeof(u->created_at)) != 0)
+            json_get_string(item, "created_at", u->created_at, sizeof(u->created_at));
         result->count++;
     }
     return 0;
@@ -590,6 +593,8 @@ int api_get_my_followers(int user_id, api_users_result_t *result) {
         api_user_t *u = &result->users[result->count];
         json_get_int(item, "id", &u->id);
         json_get_string(item, "email", u->email, sizeof(u->email));
+        if (json_get_string(item, "timestamp", u->created_at, sizeof(u->created_at)) != 0)
+            json_get_string(item, "created_at", u->created_at, sizeof(u->created_at));
         result->count++;
     }
     return 0;
@@ -752,6 +757,7 @@ int api_get_post_by_id(const char *post_id, api_post_t *post_out) {
     json_get_string(post_json, "text", post_out->text, sizeof(post_out->text));
     json_get_string(post_json, "timestamp", post_out->timestamp, sizeof(post_out->timestamp));
     json_get_string(post_json, "mediaUrl", post_out->media_url, sizeof(post_out->media_url));
+    if (strcmp(post_out->media_url, "null") == 0) post_out->media_url[0] = '\0';
     json_get_int(post_json, "userID", &post_out->user_id);
     json_get_string(post_json, "userEmail", post_out->user_email, sizeof(post_out->user_email));
 

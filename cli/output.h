@@ -4,6 +4,7 @@
 #include "ss_api.h"
 
 extern int g_color_enabled;
+extern int g_json_enabled;
 extern const char *C_RESET;
 extern const char *C_BOLD;
 extern const char *C_CYAN;
@@ -23,5 +24,7 @@ void print_profile(int user_id, const char *email, const char *created_at,
                    int follower_count, int following_count);
 void print_success(const char *msg);
 void print_error(const char *msg);
-
+void print_json_error(const char *msg);
+void print_count(int count);
+void print_count_json(int count, const char *key);
 #endif
