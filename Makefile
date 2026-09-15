@@ -22,8 +22,8 @@ $(LIB): $(LIB_OBJS)
 lib/%.o: lib/%.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-$(BIN): $(CLI_OBJS)
-	$(CC) -o $@ $^ -Llib -lss -Wl,-rpath,'$$ORIGIN/../lib' -Wl,-rpath,'$$ORIGIN/lib'
+$(BIN): $(CLI_OBJS) $(LIB)
+	$(CC) -o $@ $(CLI_OBJS) -Llib -lss -Wl,-rpath,'$$ORIGIN/../lib' -Wl,-rpath,'$$ORIGIN/lib'
 
 cli/%.o: cli/%.c
 	$(CC) -Wall -Wextra -O2 -Ilib -c -o $@ $<
