@@ -6,6 +6,7 @@
 #include "ss_config.h"
 #include "ss_state.h"
 #include "output.h"
+#include "ss_json.h"
 #include <ctype.h>
 
 static ss_state_t state;
@@ -233,6 +234,55 @@ static int cmd_delete_post(int argc, char **argv) {
     return 0;
 }
 
+static int cmd_posts(int argc, char **argv) {
+    if (require_auth() != 0) return 1;
+    int limit = 25, offset = 0;
+    int user_id = 0;
+    int has_user = 0;
+    for (int i = 0; i < argc; i++) {
+        if (strcmp(argv[i], "--limit") == 0 && i + 1 < argc) limit = atoi(argv[++i]);
+        else if (strcmp(argv[i], "--offset") == 0 && i + 1 < argc) offset = atoi(argv[++i]);
+        else if (!has_user && argv[i][0] != '-') { user_id = atoi(argv[i]); has_user = 1; }
+    }
+    api_posts_result_t result;
+    int rc;
+    if (has_user) rc = api_get_user_posts(user_id, offset, limit, &result);
+    else rc = api_get_my_posts(offset, limit, &result);
+    if (rc != 0) { print_error(api_get_last_error()); return 1; }
+    print_posts(&result);
+    return 0;
+}
+
+static int cmd_likes(int argc, char **argv) {
+    if (argc < 1) { fprintf(stderr, "Usage: simple-social-cli likes <post_id>\n"); return 1; }
+    if (require_auth() != 0) return 1;
+    char out[16384] = {0};
+    if (api_get_post_likes(argv[0], out, sizeof(out)) != 0) { print_error(api_get_last_error()); return 1; }
+    if (g_json_enabled) { printf("%s\n", out); return 0; }
+    api_users_result_t res;
+    res.count = 0;
+    const char *arr_start, *arr_end;
+    if (json_get_array(out, "likes", &arr_start, &arr_end) == 0 || json_get_array(out, "users", &arr_start, &arr_end) == 0) {
+        int len = json_array_len(arr_start, arr_end);
+        for (int i = 0; i < len && i < 256; i++) {
+            const char *is, *ie;
+            if (json_array_get_item(arr_start, arr_end, i, &is, &ie) != 0) break;
+            int l = ie - is;
+            char item[4096]; if (l >= (int)sizeof(item)) l = sizeof(item)-1; memcpy(item, is, l); item[l]='\0';
+            api_user_t *u = &res.users[res.count];
+            if (json_get_int(item, "userId", &u->id) != 0) json_get_int(item, "id", &u->id);
+            json_get_string(item, "email", u->email, sizeof(u->email));
+            if (u->email[0] == '\0') json_get_string(item, "userEmail", u->email, sizeof(u->email));
+            json_get_string(item, "created_at", u->created_at, sizeof(u->created_at));
+            res.count++;
+        }
+        print_users(&res);
+        return 0;
+    }
+    printf("%s\n", out);
+    return 0;
+}
+
 static int cmd_like(int argc, char **argv) {
     if (argc < 1) { fprintf(stderr, "Usage: simple-social-cli like <post_id>\n"); return 1; }
     if (require_auth() != 0) return 1;
@@ -457,11 +507,13 @@ static void print_help(void) {
     fprintf(stderr, "  reset-password <email> <otp> <pw> <cfm>  Reset password\n\n");
     fprintf(stderr, "POSTS\n");
     fprintf(stderr, "  feed [--limit N] [--offset N]      Show feed\n");
+    fprintf(stderr, "  posts [user_id] [--limit N] [--offset N]  List user posts\n");
     fprintf(stderr, "  post <post_id>                     Show post + comments\n");
     fprintf(stderr, "  create <text> [--media <file>]    Create post\n");
     fprintf(stderr, "  delete <post_id>                   Delete post\n");
     fprintf(stderr, "  like <post_id>                     Like post\n");
-    fprintf(stderr, "  unlike <post_id>                   Unlike post\n\n");
+    fprintf(stderr, "  unlike <post_id>                   Unlike post\n");
+    fprintf(stderr, "  likes <post_id>                    List likes for post\n\n");
     fprintf(stderr, "COMMENTS\n");
     fprintf(stderr, "  comments <post_id> [--offset N]    Show comments\n");
     fprintf(stderr, "  comment <post_id> <text>           Add comment\n");
@@ -500,11 +552,13 @@ static const command_t commands[] = {
     {"send-otp",        1, cmd_send_otp},
     {"reset-password",  4, cmd_reset_password},
     {"feed",            0, cmd_feed},
+    {"posts",           0, cmd_posts},
     {"post",            1, cmd_post},
     {"create",          1, cmd_create},
     {"delete",          1, cmd_delete_post},
     {"like",            1, cmd_like},
     {"unlike",          1, cmd_unlike},
+    {"likes",           1, cmd_likes},
     {"comments",        1, cmd_comments},
     {"comment",         2, cmd_comment},
     {"delete-comment",  1, cmd_delete_comment},
