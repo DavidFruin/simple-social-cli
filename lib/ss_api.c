@@ -857,3 +857,98 @@ int api_upload_media(const char *filepath, char *url_out, int url_size) {
     curl_easy_cleanup(curl);
     return 0;
 }
+
+int api_delete_media(int media_id) {
+    char resp[API_MAX_RESPONSE];
+    char mid[16];
+    snprintf(mid, sizeof(mid), "%d", media_id);
+    const char *base_url = config_get_base_url();
+    char media_url[512];
+    snprintf(media_url, sizeof(media_url), "%s", base_url);
+    char *slash = strrchr(media_url, '/');
+    if (slash) *slash = '\0';
+    strcat(media_url, "/media.php");
+    CURL *curl = curl_easy_init();
+    if (!curl) return -1;
+    struct write_result wr;
+    wr.data = malloc(API_MAX_RESPONSE);
+    wr.used = 0;
+    wr.size = API_MAX_RESPONSE;
+    wr.data[0] = '\0';
+    char post_fields[256];
+    snprintf(post_fields, sizeof(post_fields), "action=deleteMedia&mediaId=%s", mid);
+    struct curl_slist *headers = NULL;
+    headers = curl_slist_append(headers, "Content-Type: application/x-www-form-urlencoded");
+    char auth_header[1152];
+    if (g_jwt[0]) {
+        snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", g_jwt);
+        headers = curl_slist_append(headers, auth_header);
+    }
+    curl_easy_setopt(curl, CURLOPT_URL, media_url);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_fields);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &wr);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
+    CURLcode res = curl_easy_perform(curl);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+    int rc = 0;
+    if (res != CURLE_OK) rc = -1;
+    else {
+        long code = 0;
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &code);
+        if (code < 200 || code >= 400) rc = -1;
+    }
+    free(wr.data);
+    return rc;
+}
+
+int api_upload_media_with_id(const char *filepath, char *url_out, int url_size, int *id_out) {
+    CURL *curl = curl_easy_init();
+    if (!curl) return -1;
+    curl_mime *mime = curl_mime_init(curl);
+    curl_mimepart *part = curl_mime_addpart(mime);
+    curl_mime_filedata(part, filepath);
+    curl_mime_name(part, "file");
+    part = curl_mime_addpart(mime);
+    curl_mime_data(part, "uploadMedia", CURL_ZERO_TERMINATED);
+    curl_mime_name(part, "action");
+    struct write_result wr;
+    wr.data = malloc(API_MAX_RESPONSE);
+    wr.used = 0;
+    wr.size = API_MAX_RESPONSE;
+    wr.data[0] = '\0';
+    const char *base_url = config_get_base_url();
+    char media_url[512];
+    snprintf(media_url, sizeof(media_url), "%s", base_url);
+    char *slash = strrchr(media_url, '/');
+    if (slash) *slash = '\0';
+    strcat(media_url, "/media.php");
+    struct curl_slist *headers = NULL;
+    char auth_header2[1152];
+    if (g_jwt[0]) {
+        snprintf(auth_header2, sizeof(auth_header2), "Authorization: Bearer %s", g_jwt);
+        headers = curl_slist_append(headers, auth_header2);
+    }
+    curl_easy_setopt(curl, CURLOPT_URL, media_url);
+    curl_easy_setopt(curl, CURLOPT_MIMEPOST, mime);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &wr);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 120L);
+    CURLcode res2 = curl_easy_perform(curl);
+    curl_mime_free(mime);
+    curl_slist_free_all(headers);
+    if (res2 != CURLE_OK) { free(wr.data); curl_easy_cleanup(curl); return -1; }
+    int rc2 = 0;
+    if (json_get_string(wr.data, "mediaUrl", url_out, url_size) != 0) rc2 = -1;
+    if (rc2 == 0 && id_out) {
+        int mid2 = 0;
+        if (json_get_int(wr.data, "mediaId", &mid2) == 0) *id_out = mid2;
+        else *id_out = 0;
+    }
+    free(wr.data);
+    curl_easy_cleanup(curl);
+    return rc2;
+}

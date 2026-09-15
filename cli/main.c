@@ -177,13 +177,20 @@ static int cmd_post(int argc, char **argv) {
 }
 
 static int cmd_create(int argc, char **argv) {
-    if (argc < 1) { fprintf(stderr, "Usage: simple-social-cli create <text>\n"); return 1; }
+    if (argc < 1) { fprintf(stderr, "Usage: simple-social-cli create <text> [--media <file>]\n"); return 1; }
     if (require_auth() != 0) return 1;
-
+    char *media_file = NULL;
+    char *text_args[256];
+    int text_count = 0;
+    for (int i = 0; i < argc; i++) {
+        if (strcmp(argv[i], "--media") == 0 && i + 1 < argc) { media_file = argv[++i]; }
+        else if (text_count < 256) text_args[text_count++] = argv[i];
+    }
+    if (text_count == 0) { fprintf(stderr, "Usage: simple-social-cli create <text> [--media <file>]\n"); return 1; }
     char full_text[5000] = {0};
     size_t pos = 0;
-    for (int i = 0; i < argc; i++) {
-        const char *src = argv[i];
+    for (int i = 0; i < text_count; i++) {
+        const char *src = text_args[i];
         size_t slen = strlen(src);
         size_t need = slen + (i > 0 ? 1 : 0);
         if (pos + need >= sizeof(full_text)) { need = sizeof(full_text) - 1 - pos; if (need == 0) break; if (i > 0 && pos + 1 < sizeof(full_text)) full_text[pos++] = ' '; size_t copy = need - (i > 0 ? 1 : 0); if (copy > slen) copy = slen; memcpy(full_text + pos, src, copy); pos += copy; full_text[pos] = '\0'; break; }
@@ -192,13 +199,26 @@ static int cmd_create(int argc, char **argv) {
         pos += slen;
         full_text[pos] = '\0';
     }
-
+    char media_url[512] = {0};
+    int media_id = 0;
+    const char *media_url_ptr = NULL;
+    if (media_file) {
+        if (api_upload_media_with_id(media_file, media_url, sizeof(media_url), &media_id) != 0) {
+            print_error(api_get_last_error());
+            return 1;
+        }
+        media_url_ptr = media_url;
+    }
     char post_id[64] = {0};
-    if (api_create_post(full_text, NULL, post_id, sizeof(post_id)) != 0) {
+    if (api_create_post(full_text, media_url_ptr, post_id, sizeof(post_id)) != 0) {
+        if (media_id) api_delete_media(media_id);
         print_error(api_get_last_error());
         return 1;
     }
-    if (g_json_enabled) printf("{\"postId\":\"%s\"}\n", post_id); else fprintf(stderr, "Created post %s\n", post_id);
+    if (g_json_enabled) {
+        if (media_url_ptr) printf("{\"postId\":\"%s\",\"mediaUrl\":\"%s\"}\n", post_id, media_url);
+        else printf("{\"postId\":\"%s\"}\n", post_id);
+    } else fprintf(stderr, "Created post %s\n", post_id);
     return 0;
 }
 
@@ -412,17 +432,6 @@ static int cmd_mark_seen(int argc, char **argv) {
     return 0;
 }
 
-static int cmd_upload(int argc, char **argv) {
-    if (argc < 1) { fprintf(stderr, "Usage: simple-social-cli upload <filepath>\n"); return 1; }
-    if (require_auth() != 0) return 1;
-    char url[512] = {0};
-    if (api_upload_media(argv[0], url, sizeof(url)) != 0) {
-        print_error(api_get_last_error());
-        return 1;
-    }
-    if (g_json_enabled) { printf("{\"mediaUrl\":\""); for (char *q=url; *q; q++) { if (*q=='"' || *q=='\\') putchar('\\'); putchar(*q); } printf("\"}\n"); } else printf("%s\n", url);
-    return 0;
-}
 
 static int cmd_delete_account(int argc, char **argv) {
     if (argc < 1) { fprintf(stderr, "Usage: simple-social-cli delete-account <password>\n"); return 1; }
@@ -449,7 +458,7 @@ static void print_help(void) {
     fprintf(stderr, "POSTS\n");
     fprintf(stderr, "  feed [--limit N] [--offset N]      Show feed\n");
     fprintf(stderr, "  post <post_id>                     Show post + comments\n");
-    fprintf(stderr, "  create <text>                      Create post\n");
+    fprintf(stderr, "  create <text> [--media <file>]    Create post\n");
     fprintf(stderr, "  delete <post_id>                   Delete post\n");
     fprintf(stderr, "  like <post_id>                     Like post\n");
     fprintf(stderr, "  unlike <post_id>                   Unlike post\n\n");
@@ -468,8 +477,7 @@ static void print_help(void) {
     fprintf(stderr, "  notifications [--offset N]         Show notifications\n");
     fprintf(stderr, "  notify-count                       Unseen notification count\n");
     fprintf(stderr, "  mark-seen                          Mark notifications seen\n\n");
-    fprintf(stderr, "MEDIA\n");
-    fprintf(stderr, "  upload <filepath>                  Upload media file\n\n");
+
     fprintf(stderr, "ACCOUNT\n");
     fprintf(stderr, "  delete-account <password>          Delete your account\n\n");
     fprintf(stderr, "FLAGS\n");
@@ -509,7 +517,6 @@ static const command_t commands[] = {
     {"notifications",   0, cmd_notifications},
     {"notify-count",    0, cmd_notify_count},
     {"mark-seen",       0, cmd_mark_seen},
-    {"upload",          1, cmd_upload},
     {"delete-account",  1, cmd_delete_account},
     {NULL, 0, NULL}
 };

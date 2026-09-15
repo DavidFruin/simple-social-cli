@@ -107,5 +107,7 @@ int api_mark_notifications_seen(void);
 int api_get_post_by_id(const char *post_id, api_post_t *post_out);
 int api_delete_account(const char *password);
 int api_upload_media(const char *filepath, char *url_out, int url_size);
+int api_delete_media(int media_id);
+int api_upload_media_with_id(const char *filepath, char *url_out, int url_size, int *id_out);
 
 #endif
