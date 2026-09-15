@@ -75,6 +75,10 @@ static int cmd_logout(int argc, char **argv) {
     char path[512];
     const char *home = getenv("HOME");
     if (!home) home = "/tmp";
+    snprintf(path, sizeof(path), "%s/.simple-social-cli/jwt.txt", home);
+    unlink(path);
+    snprintf(path, sizeof(path), "%s/.simple-social-cli/user.json", home);
+    unlink(path);
     snprintf(path, sizeof(path), "%s/.simple-social-tui/jwt.txt", home);
     unlink(path);
     snprintf(path, sizeof(path), "%s/.simple-social-tui/user.json", home);

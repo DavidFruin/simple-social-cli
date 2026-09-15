@@ -13,14 +13,14 @@ static config_t g_config = {
 
 static void ensure_dirs(const char *home) {
     char path[CFG_MAX_PATH];
-    snprintf(path, sizeof(path), "%s/.simple-social-tui", home);
+    snprintf(path, sizeof(path), "%s/.simple-social-cli", home);
     mkdir(path, 0755);
-    snprintf(path, sizeof(path), "%s/.config/simple-social-tui", home);
+    snprintf(path, sizeof(path), "%s/.config/simple-social-cli", home);
     mkdir(path, 0755);
 }
 
 static void set_defaults(const char *home) {
-    snprintf(g_config.data_dir, CFG_MAX_PATH, "%s/.simple-social-tui", home);
+    snprintf(g_config.data_dir, CFG_MAX_PATH, "%s/.simple-social-cli", home);
     snprintf(g_config.download_dir, CFG_MAX_PATH, "%s/Downloads", home);
 }
 
@@ -31,9 +31,16 @@ int config_load(config_t *cfg) {
     set_defaults(home);
 
     char path[CFG_MAX_PATH];
-    snprintf(path, sizeof(path), "%s/.config/simple-social-tui/config.ini", home);
-
+    snprintf(path, sizeof(path), "%s/.config/simple-social-cli/config.ini", home);
     FILE *f = fopen(path, "r");
+    if (!f) {
+        char legacy[CFG_MAX_PATH]; snprintf(legacy, sizeof(legacy), "%s/.config/simple-social-tui/config.ini", home);
+        f = fopen(legacy, "r");
+    }
+    if (!f) {
+        char legacy[CFG_MAX_PATH]; snprintf(legacy, sizeof(legacy), "%s/.config/simple-social-cli/config.ini", home);
+        f = fopen(legacy, "r");
+    }
     if (!f) {
         *cfg = g_config;
         return 0;

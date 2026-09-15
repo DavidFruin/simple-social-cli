@@ -33,11 +33,24 @@ static const char *get_data_path(void) {
     const char *home = getenv("HOME");
     if (!home) home = "/tmp";
     static char path[512];
-    snprintf(path, sizeof(path), "%s/.simple-social-tui", home);
+    snprintf(path, sizeof(path), "%s/.simple-social-cli", home);
     return path;
 }
 
+static const char *get_legacy_path(void) {
+    const char *home = getenv("HOME");
+    if (!home) home = "/tmp";
+    static char lpath[512];
+    snprintf(lpath, sizeof(lpath), "%s/.simple-social-tui", home);
+    return lpath;
+}
+
+static void ensure_data_dir(void) {
+    mkdir(get_data_path(), 0755);
+}
+
 int ss_state_save_jwt(ss_state_t *state) {
+    ensure_data_dir();
     char path[512];
     snprintf(path, sizeof(path), "%s/jwt.txt", get_data_path());
     FILE *f = fopen(path, "w");
@@ -51,7 +64,11 @@ int ss_state_load_jwt(ss_state_t *state) {
     char path[512];
     snprintf(path, sizeof(path), "%s/jwt.txt", get_data_path());
     FILE *f = fopen(path, "r");
-    if (!f) return -1;
+    if (!f) {
+        char lpath[512]; snprintf(lpath, sizeof(lpath), "%s/jwt.txt", get_legacy_path());
+        f = fopen(lpath, "r");
+        if (!f) return -1;
+    }
     char buf[STATE_MAX_JWT];
     if (fgets(buf, sizeof(buf), f)) {
         char *end = buf + strlen(buf) - 1;
@@ -65,6 +82,7 @@ int ss_state_load_jwt(ss_state_t *state) {
 }
 
 int ss_state_save_user(ss_state_t *state) {
+    ensure_data_dir();
     char path[512];
     snprintf(path, sizeof(path), "%s/user.json", get_data_path());
     FILE *f = fopen(path, "w");
@@ -79,7 +97,11 @@ int ss_state_load_user(ss_state_t *state) {
     char path[512];
     snprintf(path, sizeof(path), "%s/user.json", get_data_path());
     FILE *f = fopen(path, "r");
-    if (!f) return -1;
+    if (!f) {
+        char lpath[512]; snprintf(lpath, sizeof(lpath), "%s/user.json", get_legacy_path());
+        f = fopen(lpath, "r");
+        if (!f) return -1;
+    }
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
     fseek(f, 0, SEEK_SET);
@@ -88,11 +110,9 @@ int ss_state_load_user(ss_state_t *state) {
     fread(buf, 1, size, f);
     buf[size] = '\0';
     fclose(f);
-
     int id = 0;
     char email[STATE_MAX_EMAIL] = {0};
     char created[32] = {0};
-
     char *ep = strstr(buf, "\"id\":");
     if (ep) id = atoi(ep + 5);
     if (json_get_string(buf, "email", email, sizeof(email)) != 0) {
