@@ -8,6 +8,19 @@
 #include <stdio.h>
 
 static char g_last_error[256] = {0};
+
+/* media.php answers {"valid":false,"message":"..."} rather than going
+ * through api_call, so the media helpers have to lift the message out
+ * themselves or callers get an empty error string. */
+static void set_media_error(const char *resp, const char *fallback) {
+    char msg[256] = {0};
+    if (resp && json_get_string(resp, "message", msg, sizeof(msg)) == 0 && msg[0])
+        snprintf(g_last_error, sizeof(g_last_error), "%s", msg);
+    else if (resp && json_get_string(resp, "error", msg, sizeof(msg)) == 0 && msg[0])
+        snprintf(g_last_error, sizeof(g_last_error), "%s", msg);
+    else
+        snprintf(g_last_error, sizeof(g_last_error), "%s", fallback);
+}
 static char g_jwt[1024] = {0};
 static int g_user_id = 0;
 
@@ -842,12 +855,14 @@ int api_upload_media(const char *filepath, char *url_out, int url_size) {
     curl_slist_free_all(headers);
 
     if (res != CURLE_OK) {
+        snprintf(g_last_error, sizeof(g_last_error), "HTTP error: %s", curl_easy_strerror(res));
         free(wr.data);
         curl_easy_cleanup(curl);
         return -1;
     }
 
     if (json_get_string(wr.data, "mediaUrl", url_out, url_size) != 0) {
+        set_media_error(wr.data, "upload failed");
         free(wr.data);
         curl_easy_cleanup(curl);
         return -1;
@@ -859,7 +874,6 @@ int api_upload_media(const char *filepath, char *url_out, int url_size) {
 }
 
 int api_delete_media(int media_id) {
-    char resp[API_MAX_RESPONSE];
     char mid[16];
     snprintf(mid, sizeof(mid), "%d", media_id);
     const char *base_url = config_get_base_url();
@@ -892,14 +906,22 @@ int api_delete_media(int media_id) {
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
     CURLcode res = curl_easy_perform(curl);
     curl_slist_free_all(headers);
-    curl_easy_cleanup(curl);
+
     int rc = 0;
-    if (res != CURLE_OK) rc = -1;
-    else {
+    if (res != CURLE_OK) {
+        snprintf(g_last_error, sizeof(g_last_error), "HTTP error: %s", curl_easy_strerror(res));
+        rc = -1;
+    } else {
         long code = 0;
+        /* getinfo before cleanup: the handle is freed below. */
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &code);
-        if (code < 200 || code >= 400) rc = -1;
+        if (code < 200 || code >= 400) {
+            set_media_error(wr.data, "delete failed");
+            rc = -1;
+        }
     }
+
+    curl_easy_cleanup(curl);
     free(wr.data);
     return rc;
 }
@@ -940,9 +962,15 @@ int api_upload_media_with_id(const char *filepath, char *url_out, int url_size, 
     CURLcode res2 = curl_easy_perform(curl);
     curl_mime_free(mime);
     curl_slist_free_all(headers);
-    if (res2 != CURLE_OK) { free(wr.data); curl_easy_cleanup(curl); return -1; }
+    if (res2 != CURLE_OK) {
+        snprintf(g_last_error, sizeof(g_last_error), "HTTP error: %s", curl_easy_strerror(res2));
+        free(wr.data); curl_easy_cleanup(curl); return -1;
+    }
     int rc2 = 0;
-    if (json_get_string(wr.data, "mediaUrl", url_out, url_size) != 0) rc2 = -1;
+    if (json_get_string(wr.data, "mediaUrl", url_out, url_size) != 0) {
+        set_media_error(wr.data, "upload failed");
+        rc2 = -1;
+    }
     if (rc2 == 0 && id_out) {
         int mid2 = 0;
         if (json_get_int(wr.data, "mediaId", &mid2) == 0) *id_out = mid2;
