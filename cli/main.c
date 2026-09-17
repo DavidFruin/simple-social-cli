@@ -79,10 +79,6 @@ static int cmd_logout(int argc, char **argv) {
     unlink(path);
     snprintf(path, sizeof(path), "%s/.simple-social-cli/user.json", home);
     unlink(path);
-    snprintf(path, sizeof(path), "%s/.simple-social-tui/jwt.txt", home);
-    unlink(path);
-    snprintf(path, sizeof(path), "%s/.simple-social-tui/user.json", home);
-    unlink(path);
     if (g_json_enabled) printf("{\"ok\":true}\n"); else fprintf(stderr, "Logged out.\n");
     return 0;
 }

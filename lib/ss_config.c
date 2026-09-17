@@ -34,14 +34,6 @@ int config_load(config_t *cfg) {
     snprintf(path, sizeof(path), "%s/.config/simple-social-cli/config.ini", home);
     FILE *f = fopen(path, "r");
     if (!f) {
-        char legacy[CFG_MAX_PATH]; snprintf(legacy, sizeof(legacy), "%s/.config/simple-social-tui/config.ini", home);
-        f = fopen(legacy, "r");
-    }
-    if (!f) {
-        char legacy[CFG_MAX_PATH]; snprintf(legacy, sizeof(legacy), "%s/.config/simple-social-cli/config.ini", home);
-        f = fopen(legacy, "r");
-    }
-    if (!f) {
         *cfg = g_config;
         return 0;
     }

@@ -23,7 +23,7 @@ simple-social-cli/
 │   ├── ss_api.c/.h           # curl client, 40 endpoints, parse_* (see §4)
 │   ├── ss_json.c/.h          # parser only: find_key, skip_string, json_get_*, array len/get
 │   ├── ss_config.c/.h        # base_url, data_dir/Downloads, ~/.config/simple-social-cli/config.ini
-│   ├── ss_state.c/.h         # JWT/user store in ~/.simple-social-cli/ (tui fallback)
+│   ├── ss_state.c/.h         # JWT/user store in ~/.simple-social-cli/
 │   └── ss_utils.c/.h         # str_trim/dup, url_encode
 └── cli/
     ├── main.c                # auto_login, 28 commands, --json/--color globals, bounded joins
@@ -116,8 +116,8 @@ Same table as root README; the diff vs backend §6:
 
 ## 6. State & config
 
-* `ss_state.c`: `get_data_path() = $HOME/.simple-social-cli` (fallback `$HOME/.simple-social-tui` for migration), `ensure_data_dir()`, `jwt.txt` + `user.json` (`{"id", "email", "created_at"}`). `logout` in `main.c` unlinks both locations.
-* `ss_config.c`: `ensure_dirs` makes `~/.simple-social-cli` + `~/.config/simple-social-cli`; `set_defaults` sets `data_dir = ~/.simple-social-cli`, `download_dir = ~/Downloads`, `base_url = https://dev.davidfruin.com/api.php`; `config_load` tries `~/.config/simple-social-cli/config.ini` then legacy `tui` path.
+* `ss_state.c`: `get_data_path() = $HOME/.simple-social-cli`, `ensure_data_dir()`, `jwt.txt` + `user.json` (`{"id", "email", "created_at"}`). `logout` in `main.c` unlinks both files.
+* `ss_config.c`: `ensure_dirs` makes `~/.simple-social-cli` + `~/.config/simple-social-cli`; `set_defaults` sets `data_dir = ~/.simple-social-cli`, `download_dir = ~/Downloads`, `base_url = https://dev.davidfruin.com/api.php`; `config_load` reads `~/.config/simple-social-cli/config.ini`.
 * Server `private/.env` is unrelated — CLI holds the client JWT, server holds the HMAC secret. `JWT_SECRET` never enters this repo.
 
 ---
@@ -152,7 +152,7 @@ posts → getMyPosts (self) / getUserPosts (other) — the missing primitive bef
 * B: `vendor/libcurl.so` restored, `Makefile` rpath + parallel fix, bounded joins, `--json` bare, color fix, media null + timestamp fixes, `commentId` string-int.
 * M: `upload` removed, `create --media` + rollback, `delete_media`/`upload_with_id` added.
 * C: `posts` + `likes` wired.
-* `tui → cli` rename with legacy fallback (this section).
+* `tui → cli` storage rename. The migration fallbacks (`~/.simple-social-tui`, `~/.config/simple-social-tui`) were removed once migration was done, freeing the `simple-social-tui` name for the separate TUI front end.
 
 ---
 
