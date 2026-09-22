@@ -11,10 +11,30 @@
 
 static ss_state_t state;
 
+// Persists an access token the library renewed on its own, so the next
+// command starts with a live one instead of refreshing all over again.
+static void on_token_refreshed(const char *jwt) {
+    ss_state_set_jwt(&state, jwt);
+    ss_state_save_jwt(&state);
+}
+
+// Identifies this tool before anything touches state or the network: it
+// decides which token directory is used and what the server records as the
+// device name.
+static void init_client(void) {
+    ss_state_set_app("cli");
+    api_set_user_agent("simple-social-cli");
+    api_set_token_refreshed_cb(on_token_refreshed);
+}
+
 static void auto_login(void) {
     config_t cfg;
     config_load(&cfg);
     api_init();
+
+    // Loaded before the first request, so an aged-out access token can be
+    // renewed without the user noticing.
+    if (ss_state_load_refresh(&state) == 0) api_set_refresh_token(state.refresh);
 
     if (ss_state_load_jwt(&state) == 0) {
         api_set_jwt(state.jwt);
@@ -58,6 +78,10 @@ static int cmd_login(int argc, char **argv) {
     api_set_jwt(jwt);
     api_set_user_id(user_id);
     ss_state_save_jwt(&state);
+    // Without this the session would still end after the access token's
+    // lifetime, which is the whole thing this is meant to avoid.
+    ss_state_set_refresh(&state, api_get_refresh_token());
+    ss_state_save_refresh(&state);
 
     char email_out[256] = {0};
     char created[32] = {0};
@@ -71,14 +95,13 @@ static int cmd_login(int argc, char **argv) {
 
 static int cmd_logout(int argc, char **argv) {
     (void)argc; (void)argv;
+    // Tell the server first: deleting the local files alone would leave the
+    // session live for the rest of its 30 days, still listed as a signed-in
+    // device. A failure here still clears local state - being unable to
+    // reach the server shouldn't leave you stuck logged in.
+    api_logout();
     ss_state_clear(&state);
-    char path[512];
-    const char *home = getenv("HOME");
-    if (!home) home = "/tmp";
-    snprintf(path, sizeof(path), "%s/.simple-social-cli/jwt.txt", home);
-    unlink(path);
-    snprintf(path, sizeof(path), "%s/.simple-social-cli/user.json", home);
-    unlink(path);
+    ss_state_delete_files();
     if (g_json_enabled) printf("{\"ok\":true}\n"); else fprintf(stderr, "Logged out.\n");
     return 0;
 }
@@ -577,6 +600,7 @@ static const command_t commands[] = {
 
 int main(int argc, char **argv) {
     ss_state_init(&state);
+    init_client();
 
     if (argc < 2) {
         print_help();

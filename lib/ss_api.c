@@ -33,6 +33,33 @@ void api_set_user_id(int user_id) {
     g_user_id = user_id;
 }
 
+static char g_refresh[1024] = {0};
+static char g_user_agent[128] = "simple-social-cli";
+static void (*g_token_refreshed_cb)(const char *jwt) = NULL;
+// Guards against a refresh attempt recursing into itself: the refresh call
+// goes through api_call() too, and its own 401 must not trigger another.
+static int g_refreshing = 0;
+
+void api_set_user_agent(const char *ua) {
+    if (!ua || !ua[0]) return;
+    strncpy(g_user_agent, ua, sizeof(g_user_agent) - 1);
+    g_user_agent[sizeof(g_user_agent) - 1] = '\0';
+}
+
+void api_set_refresh_token(const char *refresh) {
+    if (!refresh) { g_refresh[0] = '\0'; return; }
+    strncpy(g_refresh, refresh, sizeof(g_refresh) - 1);
+    g_refresh[sizeof(g_refresh) - 1] = '\0';
+}
+
+const char *api_get_refresh_token(void) {
+    return g_refresh;
+}
+
+void api_set_token_refreshed_cb(void (*cb)(const char *jwt)) {
+    g_token_refreshed_cb = cb;
+}
+
 /* curl_mime_filedata() alone doesn't set a Content-Type libcurl is confident
  * enough to guess (it falls back to application/octet-stream), and media.php
  * matches the Content-Type against an exact allowlist - so an upload was
@@ -134,6 +161,7 @@ int api_call(const char *action, const char *params, char *response, int resp_si
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &wr);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, g_user_agent);
 
     CURLcode res = curl_easy_perform(curl);
     if (res != CURLE_OK) {
@@ -146,6 +174,22 @@ int api_call(const char *action, const char *params, char *response, int resp_si
 
     long http_code = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+
+    // A 401 usually just means the access token aged out - the session
+    // behind it is still good, so renew and try once more rather than
+    // making the user log in again. Only when the refresh is itself
+    // rejected is the session really over.
+    if (http_code == 401 && !g_refreshing && g_refresh[0]) {
+        free(wr.data);
+        curl_slist_free_all(headers);
+        curl_easy_cleanup(curl);
+        if (api_refresh_session() == 0) {
+            return api_call(action, params, response, resp_size);
+        }
+        snprintf(g_last_error, sizeof(g_last_error), "HTTP 401");
+        return -1;
+    }
+
     if (http_code < 200 || http_code >= 400) {
         snprintf(g_last_error, sizeof(g_last_error), "HTTP %ld", http_code);
     }
@@ -156,6 +200,29 @@ int api_call(const char *action, const char *params, char *response, int resp_si
     curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
     return (http_code >= 200 && http_code < 400) ? 0 : -1;
+}
+
+// Defined further down, alongside the other request helpers.
+static char *build_params(const char *key, const char *val);
+
+int api_refresh_session(void) {
+    if (!g_refresh[0]) return -1;
+
+    char resp[API_MAX_RESPONSE];
+    char *params = build_params("refreshToken", g_refresh);
+
+    g_refreshing = 1;
+    int rc = api_call("refreshToken", params, resp, sizeof(resp));
+    g_refreshing = 0;
+    free(params);
+    if (rc != 0) return -1;
+
+    char jwt[1024] = {0};
+    if (json_get_string(resp, "jwt", jwt, sizeof(jwt)) != 0) return -1;
+
+    api_set_jwt(jwt);
+    if (g_token_refreshed_cb) g_token_refreshed_cb(jwt);
+    return 0;
 }
 
 static char *params_escape(const char *key, const char *val) {
@@ -200,6 +267,14 @@ int api_login(const char *email, const char *password, char *jwt_out, int jwt_si
         json_get_string(resp, "error", msg, sizeof(msg));
         snprintf(g_last_error, sizeof(g_last_error), "%s", msg[0] ? msg : "Login failed");
         return -1;
+    }
+
+    // Captured rather than returned, so api_login()'s signature - and its
+    // three callers - stay as they are. Read it back with
+    // api_get_refresh_token() to persist it.
+    char refresh[1024] = {0};
+    if (json_get_string(resp, "refreshToken", refresh, sizeof(refresh)) == 0) {
+        api_set_refresh_token(refresh);
     }
 
     if (json_get_string(resp, "jwt", jwt_out, jwt_size) != 0) {
