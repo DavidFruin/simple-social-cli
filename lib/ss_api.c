@@ -401,6 +401,62 @@ int api_delete_post(const char *post_id) {
     return rc;
 }
 
+// The server stores mentions as literal @[id] tokens in post/comment text
+// (an id survives an email change, a name never would) and hands back a
+// {"mentions":[{"id":N,"email":"..."}]} array resolving each one as of right
+// now - null email means that user was deleted. This client has no reason to
+// show the id form, so it substitutes @email in place before the caller ever
+// sees the text, the same way the web app renders it as a link.
+static void resolve_mentions(char *text, size_t text_size, const char *item_json) {
+    const char *arr_start, *arr_end;
+    if (json_get_array(item_json, "mentions", &arr_start, &arr_end) != 0) return;
+    int len = json_array_len(arr_start, arr_end);
+    if (len <= 0) return;
+
+    char result[8192];
+    int rlen = 0;
+    const char *p = text;
+
+    while (*p && rlen < (int)sizeof(result) - 1) {
+        if (p[0] == '@' && p[1] == '[') {
+            const char *digits = p + 2;
+            const char *q = digits;
+            while (*q >= '0' && *q <= '9') q++;
+            if (q > digits && *q == ']') {
+                int id = atoi(digits);
+                char email[256] = {0};
+                int found = 0;
+                for (int i = 0; i < len; i++) {
+                    const char *m_start, *m_end;
+                    if (json_array_get_item(arr_start, arr_end, i, &m_start, &m_end) != 0) break;
+                    int mlen = m_end - m_start;
+                    char mitem[512];
+                    if (mlen >= (int)sizeof(mitem)) mlen = sizeof(mitem) - 1;
+                    memcpy(mitem, m_start, mlen);
+                    mitem[mlen] = '\0';
+                    int mid = 0;
+                    json_get_int(mitem, "id", &mid);
+                    if (mid == id) {
+                        found = (json_get_string(mitem, "email", email, sizeof(email)) == 0);
+                        break;
+                    }
+                }
+                int n = snprintf(result + rlen, sizeof(result) - rlen, "@%s",
+                                  found ? email : "deleted user");
+                if (n > 0) rlen += n;
+                if (rlen > (int)sizeof(result) - 1) rlen = sizeof(result) - 1;
+                p = q + 1;
+                continue;
+            }
+        }
+        result[rlen++] = *p++;
+    }
+    result[rlen] = '\0';
+
+    strncpy(text, result, text_size - 1);
+    text[text_size - 1] = '\0';
+}
+
 static int parse_posts(const char *resp, api_posts_result_t *result) {
     result->count = 0;
     result->has_more = 0;
@@ -427,6 +483,7 @@ static int parse_posts(const char *resp, api_posts_result_t *result) {
         memset(p, 0, sizeof(*p));
         json_get_string(item, "id", p->id, sizeof(p->id));
         json_get_string(item, "text", p->text, sizeof(p->text));
+        resolve_mentions(p->text, sizeof(p->text), item);
         json_get_string(item, "timestamp", p->timestamp, sizeof(p->timestamp));
         json_get_string(item, "mediaUrl", p->media_url, sizeof(p->media_url));
         if (strcmp(p->media_url, "null") == 0) p->media_url[0] = '\0';
@@ -694,6 +751,7 @@ int api_get_post_comments(const char *post_id, int offset, int limit, api_commen
         json_get_int(item, "id", &c->id);
         json_get_int(item, "user_id", &c->user_id);
         json_get_string(item, "text", c->text, sizeof(c->text));
+        resolve_mentions(c->text, sizeof(c->text), item);
         json_get_string(item, "created_at", c->created_at, sizeof(c->created_at));
         json_get_string(item, "user_email", c->user_email, sizeof(c->user_email));
         result->count++;
@@ -793,6 +851,7 @@ int api_get_post_by_id(const char *post_id, api_post_t *post_out) {
     memset(post_out, 0, sizeof(*post_out));
     json_get_string(post_json, "id", post_out->id, sizeof(post_out->id));
     json_get_string(post_json, "text", post_out->text, sizeof(post_out->text));
+    resolve_mentions(post_out->text, sizeof(post_out->text), post_json);
     json_get_string(post_json, "timestamp", post_out->timestamp, sizeof(post_out->timestamp));
     json_get_string(post_json, "mediaUrl", post_out->media_url, sizeof(post_out->media_url));
     if (strcmp(post_out->media_url, "null") == 0) post_out->media_url[0] = '\0';
