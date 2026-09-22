@@ -33,6 +33,31 @@ void api_set_user_id(int user_id) {
     g_user_id = user_id;
 }
 
+/* curl_mime_filedata() alone doesn't set a Content-Type libcurl is confident
+ * enough to guess (it falls back to application/octet-stream), and media.php
+ * matches the Content-Type against an exact allowlist - so an upload was
+ * being rejected as an unsupported type regardless of what the file actually
+ * was. Mirrors the extension list media.php accepts (originalExtension()). */
+static const char *guess_mime_type(const char *filepath) {
+    const char *dot = strrchr(filepath, '.');
+    if (!dot) return "application/octet-stream";
+
+    char *ext = str_lower(dot + 1);
+    const char *mime = "application/octet-stream";
+    if (strcmp(ext, "jpg") == 0 || strcmp(ext, "jpeg") == 0) mime = "image/jpeg";
+    else if (strcmp(ext, "png") == 0) mime = "image/png";
+    else if (strcmp(ext, "gif") == 0) mime = "image/gif";
+    else if (strcmp(ext, "webp") == 0) mime = "image/webp";
+    else if (strcmp(ext, "mov") == 0) mime = "video/quicktime";
+    else if (strcmp(ext, "mp4") == 0) mime = "video/mp4";
+    else if (strcmp(ext, "m4v") == 0) mime = "video/m4v";
+    else if (strcmp(ext, "webm") == 0) mime = "video/webm";
+    else if (strcmp(ext, "wav") == 0) mime = "audio/wav";
+    else if (strcmp(ext, "mp3") == 0) mime = "audio/mpeg";
+    free(ext);
+    return mime;
+}
+
 struct write_result {
     char *data;
     size_t used;
@@ -818,6 +843,7 @@ int api_upload_media(const char *filepath, char *url_out, int url_size) {
     curl_mimepart *part = curl_mime_addpart(mime);
     curl_mime_filedata(part, filepath);
     curl_mime_name(part, "file");
+    curl_mime_type(part, guess_mime_type(filepath));
 
     part = curl_mime_addpart(mime);
     curl_mime_data(part, "uploadMedia", CURL_ZERO_TERMINATED);
@@ -933,6 +959,7 @@ int api_upload_media_with_id(const char *filepath, char *url_out, int url_size, 
     curl_mimepart *part = curl_mime_addpart(mime);
     curl_mime_filedata(part, filepath);
     curl_mime_name(part, "file");
+    curl_mime_type(part, guess_mime_type(filepath));
     part = curl_mime_addpart(mime);
     curl_mime_data(part, "uploadMedia", CURL_ZERO_TERMINATED);
     curl_mime_name(part, "action");
