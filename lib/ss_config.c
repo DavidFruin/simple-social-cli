@@ -6,7 +6,7 @@
 #include <sys/stat.h>
 
 static config_t g_config = {
-    .base_url = "https://dev.davidfruin.com/api.php",
+    .base_url = "https://app.davidfruin.com/api.php",
     .data_dir = "",
     .download_dir = ""
 };

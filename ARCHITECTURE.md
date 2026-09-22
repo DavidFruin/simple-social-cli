@@ -1,6 +1,6 @@
 # Simple Social CLI — Architecture Map
 
-> **Alternate IO for Simple Social (`https://dev.davidfruin.com/api.php`)**  
+> **Alternate IO for Simple Social (`https://app.davidfruin.com/api.php`)**  
 > **This repo:** `simple-social-cli` — C, libcurl, hand-rolled JSON. Builds to `lib/libss.so` + `simple-social-cli`.
 
 ---
@@ -53,7 +53,7 @@ make clean
 `api_call(action, params, resp, size)`:
 * `curl_easy_init`, `write_callback` (realloc), `post_fields = "action=foo&"+params`,
 * `headers = Content-Type + Authorization: Bearer <g_jwt>` if set,
-* `CURLOPT_URL = config_get_base_url()` (`https://dev.davidfruin.com/api.php` default), `CURLOPT_POSTFIELDS`, `CURLOPT_WRITEFUNCTION`, `TIMEOUT 30`.
+* `CURLOPT_URL = config_get_base_url()` (`https://app.davidfruin.com/api.php` default), `CURLOPT_POSTFIELDS`, `CURLOPT_WRITEFUNCTION`, `TIMEOUT 30`.
 * `api_get_last_error()` mirrors server `"message"`/`"error"`; `json_get_int` now tolerates quoted numbers (`"48"`).
 
 Media is special: `api_upload_media[_with_id]` builds a `curl_mime` (`file` + `action=uploadMedia`) to `…/media.php`; `api_delete_media` POSTs `action=deleteMedia&mediaId=…` to the same endpoint.
@@ -117,7 +117,7 @@ Same table as root README; the diff vs backend §6:
 ## 6. State & config
 
 * `ss_state.c`: `get_data_path() = $HOME/.simple-social-cli`, `ensure_data_dir()`, `jwt.txt` + `user.json` (`{"id", "email", "created_at"}`). `logout` in `main.c` unlinks both files.
-* `ss_config.c`: `ensure_dirs` makes `~/.simple-social-cli` + `~/.config/simple-social-cli`; `set_defaults` sets `data_dir = ~/.simple-social-cli`, `download_dir = ~/Downloads`, `base_url = https://dev.davidfruin.com/api.php`; `config_load` reads `~/.config/simple-social-cli/config.ini`.
+* `ss_config.c`: `ensure_dirs` makes `~/.simple-social-cli` + `~/.config/simple-social-cli`; `set_defaults` sets `data_dir = ~/.simple-social-cli`, `download_dir = ~/Downloads`, `base_url = https://app.davidfruin.com/api.php`; `config_load` reads `~/.config/simple-social-cli/config.ini`.
 * Server `private/.env` is unrelated — CLI holds the client JWT, server holds the HMAC secret. `JWT_SECRET` never enters this repo.
 
 ---
