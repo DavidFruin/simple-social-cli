@@ -19,11 +19,15 @@ CLI_OBJS = $(CLI_SRCS:.c=.o)
 LIB = lib/libss.a
 BIN = simple-social-cli
 
-all: vendor-links $(LIB) $(BIN)
+# The headers are vendored, so only the runtime library is needed to link.
+# With libcurl's dev package installed, pkg-config supplies the flags.
+# Without it there is no unversioned libcurl.so for plain -lcurl to find, so
+# link the SONAME directly: libcurl.so.4 is what every distro's runtime
+# package ships, whatever the exact version behind it.
+# Consumers vendoring this repo link against the same way, so they copy this.
+CURL_LIBS = $(shell pkg-config --libs libcurl 2>/dev/null || echo -l:libcurl.so.4)
 
-vendor-links:
-	@mkdir -p vendor
-	@if [ ! -e vendor/libcurl.so ]; then ln -sf /usr/lib/x86_64-linux-gnu/libcurl.so.4.8.0 vendor/libcurl.so; echo "linked vendor/libcurl.so"; fi
+all: $(LIB) $(BIN)
 
 $(LIB): $(LIB_OBJS)
 	ar rcs $@ $^
@@ -32,7 +36,7 @@ lib/%.o: lib/%.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(BIN): $(CLI_OBJS) $(LIB)
-	$(CC) -o $@ $(CLI_OBJS) $(LIB) -Lvendor -lcurl
+	$(CC) -o $@ $(CLI_OBJS) $(LIB) $(CURL_LIBS)
 
 cli/%.o: cli/%.c
 	$(CC) -Wall -Wextra -O2 -MMD -MP -Ilib -c -o $@ $<
@@ -48,4 +52,4 @@ uninstall:
 
 -include $(LIB_OBJS:.o=.d) $(CLI_OBJS:.o=.d)
 
-.PHONY: all clean install uninstall vendor-links
+.PHONY: all clean install uninstall
