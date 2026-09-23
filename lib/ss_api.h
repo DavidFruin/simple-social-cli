@@ -72,6 +72,25 @@ void api_set_user_id(int user_id);
 int api_call(const char *action, const char *params, char *response, int resp_size);
 const char *api_get_last_error(void);
 
+// Identifies this tool to the server, which parses it into the device name
+// shown in the account's device list. Set once at startup.
+void api_set_user_agent(const char *ua);
+
+// ---- Sessions ----------------------------------------------------------
+// An access token is short-lived; the refresh token is what keeps this tool
+// signed in. Hand the stored one back after loading it from disk, and
+// api_call() will use it to renew silently instead of failing on a token
+// that merely aged out.
+void api_set_refresh_token(const char *refresh);
+// The refresh token issued by the most recent api_login(), for saving.
+const char *api_get_refresh_token(void);
+// Exchanges the refresh token for a new access token. Returns 0 on success.
+// Called automatically by api_call() on a 401; rarely needed directly.
+int api_refresh_session(void);
+// Invoked whenever a refresh produces a new access token, so the caller can
+// persist it - the API layer deliberately knows nothing about storage.
+void api_set_token_refreshed_cb(void (*cb)(const char *jwt));
+
 int api_login(const char *email, const char *password, char *jwt_out, int jwt_size, int *user_id_out);
 int api_logout(void);
 int api_get_my_info(int *id_out, char *email_out, int email_size, char *created_out, int created_size);

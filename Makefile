@@ -1,5 +1,9 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -O2 -Ivendor/include -Ilib
+# -MMD -MP emits .d files listing each object's header dependencies, so
+# editing a header rebuilds everything that includes it. Without this,
+# changing a struct in a header left stale objects linking against the old
+# layout - which builds cleanly and then misbehaves at runtime.
+CFLAGS = -Wall -Wextra -O2 -MMD -MP -Ivendor/include -Ilib
 
 LIB_SRCS = lib/ss_api.c lib/ss_json.c lib/ss_config.c lib/ss_state.c lib/ss_utils.c
 LIB_OBJS = $(LIB_SRCS:.c=.o)
@@ -35,15 +39,17 @@ $(BIN): $(CLI_OBJS) $(LIB)
 	$(CC) -o $@ $(CLI_OBJS) $(LIB) $(CURL_LIBS)
 
 cli/%.o: cli/%.c
-	$(CC) -Wall -Wextra -O2 -Ilib -c -o $@ $<
+	$(CC) -Wall -Wextra -O2 -MMD -MP -Ilib -c -o $@ $<
 
 clean:
-	rm -f $(LIB_OBJS) $(CLI_OBJS) $(LIB) $(BIN)
+	rm -f $(LIB_OBJS) $(CLI_OBJS) $(LIB) $(BIN) $(LIB_OBJS:.o=.d) $(CLI_OBJS:.o=.d)
 
 install: $(BIN)
 	install -m 755 $(BIN) /usr/local/bin/sscli
 
 uninstall:
 	rm -f /usr/local/bin/sscli
+
+-include $(LIB_OBJS:.o=.d) $(CLI_OBJS:.o=.d)
 
 .PHONY: all clean install uninstall
