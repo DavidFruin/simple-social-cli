@@ -2,4 +2,9 @@
 *.d
 *.so
 *.a
+core
+*.core
+.DS_Store
+*.swp
+*~
 simple-social-cli
