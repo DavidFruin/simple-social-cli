@@ -227,6 +227,16 @@ static int cmd_create(int argc, char **argv) {
     int media_id = 0;
     const char *media_url_ptr = NULL;
     if (media_file) {
+        // Checked here rather than left to the server: a bad path used to
+        // round-trip a full upload request just to come back as media.php's
+        // generic "No file was selected", which reads like a server problem
+        // rather than a typo in what was typed.
+        if (access(media_file, R_OK) != 0) {
+            char msg[600];
+            snprintf(msg, sizeof(msg), "Media file not found or not readable: %s", media_file);
+            print_error(msg);
+            return 1;
+        }
         if (api_upload_media_with_id(media_file, media_url, sizeof(media_url), &media_id) != 0) {
             print_error(api_get_last_error());
             return 1;
