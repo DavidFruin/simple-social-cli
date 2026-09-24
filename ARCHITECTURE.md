@@ -15,10 +15,9 @@ The web app (`simple-social` repo) is the canonical IO; this repo is a *second* 
 
 ```
 simple-social-cli/
-├── Makefile                   # all: vendor-links → lib → bin; rpath; parallel-safe
+├── Makefile                   # all: lib → bin; libcurl via pkg-config or its SONAME
 ├── vendor/
-│   ├── include/curl/         # vendored 8.14.1 (matches host 8.14.1-2+deb13u5)
-│   └── libcurl.so            # symlink → /usr/lib/x86_64-linux-gnu/libcurl.so.4.8.0 (restored Phase B)
+│   └── include/curl/         # vendored 8.14.1 headers; only the runtime libcurl.so.4 is needed
 ├── lib/ → lib/libss.so
 │   ├── ss_api.c/.h           # curl client, 40 endpoints, parse_* (see §4)
 │   ├── ss_json.c/.h          # parser only: find_key, skip_string, json_get_*, array len/get
@@ -30,14 +29,14 @@ simple-social-cli/
     └── output.c/.h           # human tables vs bare JSON, color, null-media guard
 ```
 
-`*.o`, `*.so` ignored except the symlink `!vendor/libcurl.so`.
+`*.o`, `*.so`, `*.a` ignored.
 
 ---
 
 ## 3. Build
 
 ```bash
-make -j4          # vendor-links, then lib/libss.so (-shared -Lvendor -lcurl), then bin (-Llib -lss -Wl,-rpath)
+make -j4          # lib/libss.a, then bin (libss.a + `pkg-config --libs libcurl`, else -l:libcurl.so.4)
 make clean
 ./simple-social-cli --help
 ```

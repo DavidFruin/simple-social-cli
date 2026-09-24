@@ -2,5 +2,4 @@
 *.d
 *.so
 *.a
-!vendor/libcurl.so
 simple-social-cli
