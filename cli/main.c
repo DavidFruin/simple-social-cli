@@ -281,7 +281,10 @@ static int cmd_likes(int argc, char **argv) {
     if (require_auth() != 0) return 1;
     char out[16384] = {0};
     if (api_get_post_likes(argv[0], out, sizeof(out)) != 0) { print_error(api_get_last_error()); return 1; }
-    if (g_json_enabled) { printf("%s\n", out); return 0; }
+
+    // Parsed into the same struct for both modes - JSON used to print the
+    // raw server response verbatim, which leaked the "valid":true envelope
+    // that every other command's --json output strips.
     api_users_result_t res;
     res.count = 0;
     const char *arr_start, *arr_end;
@@ -299,10 +302,8 @@ static int cmd_likes(int argc, char **argv) {
             json_get_string(item, "created_at", u->created_at, sizeof(u->created_at));
             res.count++;
         }
-        print_users(&res);
-        return 0;
     }
-    printf("%s\n", out);
+    print_likes(&res);
     return 0;
 }
 

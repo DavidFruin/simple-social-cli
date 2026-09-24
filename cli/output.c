@@ -145,6 +145,27 @@ void print_users(const api_users_result_t *result) {
     }
 }
 
+// Same shape as print_users, but the JSON key is "likes" - who liked a post
+// isn't "every user", and every other command emits a bare object keyed by
+// what it actually returned rather than a generic one.
+void print_likes(const api_users_result_t *result) {
+    if (g_json_enabled) {
+        printf("{\"likes\":[");
+        for (int i = 0; i < result->count; i++) {
+            const api_user_t *u = &result->users[i];
+            if (i) printf(",");
+            printf("{\"id\":%d,\"email\":", u->id);
+            json_escape(stdout, u->email);
+            printf(",\"created_at\":");
+            json_escape(stdout, u->created_at);
+            printf("}");
+        }
+        printf("]}\n");
+        return;
+    }
+    print_users(result);
+}
+
 void print_user_info(int id, const char *email, const char *created_at) {
     if (g_json_enabled) {
         printf("{\"id\":%d,\"email\":", id);
